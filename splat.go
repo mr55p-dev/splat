@@ -85,7 +85,17 @@ func startupApp(ctx context.Context, config *AppConfig, engine *DockerEngine, se
 
 	// Launch a docker container
 	containerName := fmt.Sprintf("/%s-%s-runtime", config.Name, config.Environment)
-	err = engine.ContainerCreateAndStart(ctx, containerName, config.Name, true)
+	err = engine.ContainerCreateAndStart(ctx, ContainerCreateAndStartOpts{
+		name:    fmt.Sprintf("splat-%s-%s", config.Name, config.Environment),
+		image:   config.Name,
+		replace: true,
+		networkMap: []PortMapping{{
+			HostAddr:      "0.0.0.0",
+			HostPort:      "3001",
+			ContainerPort: "8080",
+			Protocol:      "tcp",
+		}},
+	})
 	if err != nil {
 		return err
 	}

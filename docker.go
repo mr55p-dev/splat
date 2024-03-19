@@ -132,6 +132,7 @@ func (engine *DockerEngine) ContainerStopAndRemove(ctx context.Context, containe
 
 	for _, container := range containers {
 		for _, name := range container.Names {
+			log.Debug("Checking name", "name", name, "desired", containerName)
 			if name == containerName {
 				log.Debug(
 					"Found existing container",
@@ -158,37 +159,58 @@ func (engine *DockerEngine) ContainerStopAndRemove(ctx context.Context, containe
 	return nil
 }
 
-func (engine *DockerEngine) ContainerCreateAndStart(ctx context.Context, name, image string, replace bool) error {
-	log.Info("Operating container", "containerId", name, "imageId", image)
-	if replace {
-		err := engine.ContainerStopAndRemove(ctx, name)
+type PortMapping struct {
+	ContainerPort string
+	Protocol      string
+	HostPort      string
+	HostAddr      string
+}
+
+func (p *PortMapping) GetHostStr() nat.Port {
+	return nat.Port(fmt.Sprintf("%s/%s", p.ContainerPort, p.Protocol))
+}
+
+type ContainerCreateAndStartOpts struct {
+	name, image string
+	networkMap  []PortMapping
+	replace     bool
+}
+
+func (engine *DockerEngine) ContainerCreateAndStart(ctx context.Context, opts ContainerCreateAndStartOpts) error {
+	containerName := opts.name
+	log.Info("Operating container", "containerId", containerName, "imageId", opts.image)
+	if opts.replace {
+		err := engine.ContainerStopAndRemove(ctx, containerName)
 		if err != nil {
 			return err
 		}
 	}
+	// Get the network configuration
+	portSet := nat.PortSet{}
+	portMap := nat.PortMap{}
+	for _, mapping := range opts.networkMap {
+		portSet[mapping.GetHostStr()] = struct{}{}
+		portMap[mapping.GetHostStr()] = []nat.PortBinding{{
+			HostIP:   mapping.HostAddr,
+			HostPort: mapping.HostPort,
+		}}
+	}
+	// Create the container
 	containerCreate, err := engine.docker.ContainerCreate(
 		ctx,
 		&container.Config{
-			Image: image,
-			ExposedPorts: nat.PortSet{
-				"8080/tcp": struct{}{},
-			},
+			Image:        opts.image,
+			ExposedPorts: portSet,
 		},
 		&container.HostConfig{
-			PortBindings: nat.PortMap{
-				"8080/tcp": []nat.PortBinding{
-					{
-						HostIP:   "0.0.0.0",
-						HostPort: "3000",
-					},
-				},
-			},
-		}, nil, nil, name,
+			PortBindings: portMap,
+		},
+		nil, nil, containerName,
 	)
 	if err != nil {
 		return fmt.Errorf("Failed to create container: %s", err.Error())
 	}
-	engine.containers[name] = true
+	engine.containers[opts.image] = true
 	log.Info("Created container", "id", containerCreate.ID)
 	err = engine.docker.ContainerStart(
 		ctx,
