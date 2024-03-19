@@ -37,16 +37,20 @@ type DockerEngineOpt func(*DockerEngine) error
 
 func DockerWithLogFiles(path, name string) DockerEngineOpt {
 	return func(de *DockerEngine) error {
+		err := os.MkdirAll(path, 0o777)
+		if err != nil {
+			return err
+		}
 		dockerLog, err := os.Create(filepath.Join(
 			path,
-			fmt.Sprintf("%s-doker-engine.log", name),
+			fmt.Sprintf("%s.doker-engine.log", name),
 		))
 		if err != nil {
 			return fmt.Errorf("Error creating log file: %s", err.Error())
 		}
 		appLog, err := os.Create(filepath.Join(
 			path,
-			fmt.Sprintf("%s-container.log", name),
+			fmt.Sprintf("%s.container.log", name),
 		))
 		if err != nil {
 			return fmt.Errorf("Error creating app log: %s", err.Error())
