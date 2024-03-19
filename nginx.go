@@ -7,11 +7,13 @@ import (
 	"os"
 	"path/filepath"
 	"text/template"
+
+	"github.com/charmbracelet/log"
 )
 
 type ServiceManager struct {
-	// conn *dbus.Conn
 	nginxBasePath string
+	configPaths   []string
 }
 
 type NginxConfigData struct {
@@ -32,13 +34,8 @@ func WithNginxPath(path string) ServiceManagerOption {
 }
 
 func NewServiceManager(ctx context.Context, opts ...ServiceManagerOption) (*ServiceManager, error) {
-	// conn, err := dbus.NewSystemdConnection()
-	// if err != nil {
-	// 	return nil, err
-	// }
 	manager := &ServiceManager{
 		nginxBasePath: "/etc/nginx/conf.d",
-		// conn: conn,
 	}
 
 	for _, v := range opts {
@@ -49,7 +46,12 @@ func NewServiceManager(ctx context.Context, opts ...ServiceManagerOption) (*Serv
 }
 
 func (sm *ServiceManager) Close() {
-	// sm.conn.Close()
+	for _, file := range sm.configPaths {
+		err := os.RemoveAll(file)
+		if err != nil {
+			log.Error("Error cleaning up", "configFile", file)
+		}
+	}
 }
 
 func GenerateNginxConfig(externalHost, internalHost string) ([]byte, error) {
@@ -64,7 +66,7 @@ func GenerateNginxConfig(externalHost, internalHost string) ([]byte, error) {
 	return output.Bytes(), err
 }
 
-func (sm *ServiceManager) InstallNignxConfig(ctx context.Context, data []byte, name, env string) error {
+func (sm *ServiceManager) Install(ctx context.Context, data []byte, name, env string) error {
 	configPath := filepath.Join(sm.nginxBasePath, fmt.Sprintf("splat.%s.%s.conf", name, env))
 	f, err := os.Create(configPath)
 	if err != nil {
@@ -74,13 +76,10 @@ func (sm *ServiceManager) InstallNignxConfig(ctx context.Context, data []byte, n
 	if err != nil {
 		return err
 	}
+	sm.configPaths = append(sm.configPaths, configPath)
 	return nil
 }
 
-func (sm *ServiceManager) reloadNginx(ctx context.Context) error {
-	// _, err := sm.conn.RestartUnit("nginx", "replace", nil)
-	// if err != nil {
-	// 	return err
-	// }
-	return nil
-}
+func (sm *ServiceManager) Start(ctx context.Context) error  { return nil }
+func (sm *ServiceManager) Stop(ctx context.Context) error   { return nil }
+func (sm *ServiceManager) Reload(ctx context.Context) error { return nil }

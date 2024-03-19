@@ -5,8 +5,8 @@ Tasks:
 - Delete app
 
 ## Install app:
-1. Pull docker image from ECR
-2. Install nginx config
+1. ~~Pull docker image from ECR~~
+2. ~~Install nginx config~~
 3. Reload nginx unit
 4. Start docker container
 
@@ -25,10 +25,14 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/charmbracelet/log"
 	"github.com/mr55p-dev/gonk"
 )
+
+var StartupApps []string = []string{"app.prd.yaml"}
 
 func fatal(msg string, err error) {
 	log.Fatal(msg, "error", err)
@@ -40,6 +44,7 @@ type AppConfig struct {
 	EcrRepo      string `config:"ecr.repository"`
 	ExternalHost string `config:"net.external"`
 	InternalHost string `config:"net.internal"`
+	LoginToken   string
 }
 
 func (conf *AppConfig) getContainerName() string {
@@ -50,17 +55,11 @@ func (conf *AppConfig) getImageName() string {
 	return fmt.Sprintf("%s:%s", conf.Name, "latest")
 }
 
-var LOGIN_TOKEN string
-
-func init() {
-	LOGIN_TOKEN = os.Getenv("ECR_TOKEN")
-}
-
-func InstallApplicationFromConfig(ctx context.Context, config *AppConfig, engine *DockerEngine, serviceManager *ServiceManager) error {
+func startupApp(ctx context.Context, config *AppConfig, engine *DockerEngine, serviceManager *ServiceManager) error {
 	// Auth with the registry
-	engine.SetAuthFromLoginToken(LOGIN_TOKEN, config.EcrRepo)
+	engine.SetAuthFromLoginToken(config.LoginToken, config.EcrRepo)
 	// Pull the image down
-	err := engine.PullImage(ctx, config.EcrRepo, "latest")
+	err := engine.ImagePull(ctx, config.EcrRepo, "latest")
 	if err != nil {
 		return err
 	}
@@ -70,56 +69,99 @@ func InstallApplicationFromConfig(ctx context.Context, config *AppConfig, engine
 	if err != nil {
 		return err
 	}
-	err = serviceManager.InstallNignxConfig(ctx, data, config.Name, config.Environment)
+
+	err = serviceManager.Install(ctx, data, config.Name, config.Environment)
 	if err != nil {
 		return err
 	}
-	err = serviceManager.reloadNginx(ctx)
+
+	err = serviceManager.Reload(ctx)
 	if err != nil {
 		return err
 	}
 
 	// Launch a docker container
-	containerId, err := engine.CreateAndStart(ctx, config.Name, false)
+	containerName := fmt.Sprintf("/%s-%s-runtime", config.Name, config.Environment)
+	err = engine.ContainerCreateAndStart(ctx, containerName, config.Name, true)
 	if err != nil {
 		return err
 	}
 
-	log.Info("Started container", "id", containerId)
+	log.Info("Started container", "id", containerName)
 
 	return nil
 }
 
 func main() {
 	log.SetLevel(log.DebugLevel)
-
-	// load configs from somewhere?
-	appConf := AppConfig{
-		Name: "pagemail",
-	}
-	err := gonk.LoadConfig(
-		&appConf,
-		gonk.FileLoader("app.prd.yaml", false),
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	signals := make(chan os.Signal)
+	signal.Notify(
+		signals,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGINFO,
+		syscall.SIGHUP,
 	)
-	if err != nil {
-		fatal("Failed to load app.yaml", err)
-	}
-	ctx := context.TODO()
+	errs := make(map[string]error)
 
+	LOGIN_TOKEN := os.Getenv("ECR_TOKEN")
 	engine, err := NewDockerEnigne(ctx, LOGIN_TOKEN)
 	if err != nil {
-		fatal("Failed to start docker engine", err)
+		panic(err)
 	}
+	defer engine.Close()
 
-	manager, err := NewServiceManager(ctx, WithNginxPath("./nginx"))
+	manager, err := NewServiceManager(ctx, WithNginxPath("./nginx/"))
 	if err != nil {
-		fatal("Failed to start service manager", err)
+		panic(err)
+	}
+	defer manager.Close()
+
+	go func() {
+		for {
+			switch <-signals {
+			case syscall.SIGINFO:
+				// Should print some info out...
+				containers := make([]string, len(engine.containers))
+				for key := range engine.containers {
+					containers = append(containers, key)
+				}
+				log.Info("Hello siginfo", "containers", containers)
+			case syscall.SIGHUP:
+				// Reload the config
+				log.Info("Should be reloading config")
+			default:
+				cancel()
+			}
+		}
+	}()
+
+	for _, configPath := range StartupApps {
+		appConfig := new(AppConfig)
+		err := gonk.LoadConfig(appConfig, gonk.FileLoader(configPath, false))
+		if err != nil {
+			errs[configPath] = err
+			continue
+		}
+
+		// for now
+		appConfig.LoginToken = LOGIN_TOKEN
+
+		err = startupApp(ctx, appConfig, engine, manager)
+		if err != nil {
+			errs[configPath] = err
+			continue
+		}
 	}
 
-	err = InstallApplicationFromConfig(ctx, &appConf, engine, manager)
-	if err != nil {
-		fatal("Failed to install service", err)
+	for key, val := range errs {
+		if val != nil {
+			log.Error("Error reading config file", "configFile", key, "error", val.Error())
+		}
 	}
 
-	log.Info("Done")
+	// Wait until signals arrive
+	<-ctx.Done()
 }
