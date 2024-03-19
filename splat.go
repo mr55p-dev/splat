@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 	"syscall"
 
@@ -34,7 +35,7 @@ import (
 )
 
 var StartupApps []string = []string{
-	"pagemail.prd.yaml",
+	// "pagemail.prd.yaml",
 	"example.dev.yaml",
 }
 
@@ -42,34 +43,59 @@ func fatal(msg string, err error) {
 	log.Fatal(msg, "error", err)
 }
 
+type RunningAppData struct {
+	config        *AppConfig
+	containerId   string
+	containerName string
+	internalPort  string
+}
+
+var RunningContainerData map[string]RunningAppData
+
 type AppConfig struct {
 	Name         string `config:"name"`
 	Environment  string `config:"environment"`
-	EcrRepo      string `config:"ecr.repository"`
-	ExternalHost string `config:"net.external"`
-	InternalHost string `config:"net.internal"`
-	LoginToken   string
-}
+	ContainerEcr string `config:"container.ecr,optional"`
+	ContainerImg string `config:"container.image"`
+	ContainerTag string `config:"container.tag"`
 
-func (conf *AppConfig) getContainerName() string {
-	return fmt.Sprintf("%s.%s", conf.Name, conf.Environment)
-}
-
-func (conf *AppConfig) getImageName() string {
-	return fmt.Sprintf("%s:%s", conf.Name, "latest")
+	ExternalHost  string `config:"net.external"`
+	ContainerPort int    `config:"net.containerPort"`
+	LoginToken    string
 }
 
 func startupApp(ctx context.Context, config *AppConfig, engine *DockerEngine, serviceManager *ServiceManager) error {
-	// Auth with the registry
-	engine.SetAuthFromLoginToken(config.LoginToken, config.EcrRepo)
-	// Pull the image down
-	err := engine.ImagePull(ctx, config.EcrRepo, "latest")
-	if err != nil {
-		return err
+	uid := fmt.Sprintf(
+		"%s.%s.%s",
+		config.Name,
+		config.Environment,
+		generateId(),
+	)
+	// If we have a ECR url pull the image
+	if config.ContainerEcr != "" {
+		log.Info("Pulling image from AWS", "repo", config.ContainerEcr)
+		engine.SetAuthFromLoginToken(config.LoginToken, config.ContainerEcr)
+		image := fmt.Sprintf("%s/%s", config.ContainerEcr, config.ContainerImg)
+		err := engine.ImagePull(ctx, image, config.ContainerTag)
+		if err != nil {
+			return err
+		}
 	}
+	log.Info("Using app config")
+	log.Printf("%+v", config)
+
+	// Get a port and generate a mapping
+	port := generatePort(10000, 10100)
+	mainPortMapping := PortMapping{
+		ContainerPort: strconv.Itoa(config.ContainerPort),
+		HostPort:      strconv.Itoa(port),
+		HostAddr:      "0.0.0.0",
+		Protocol:      "tcp",
+	}
+	internalHost := fmt.Sprintf("http://127.0.0.1:%d", port)
 
 	// Setup nginx
-	data, err := GenerateNginxConfig(config.ExternalHost, config.InternalHost)
+	data, err := GenerateNginxConfig(config.ExternalHost, internalHost)
 	if err != nil {
 		return err
 	}
@@ -85,28 +111,31 @@ func startupApp(ctx context.Context, config *AppConfig, engine *DockerEngine, se
 	}
 
 	// Launch a docker container
-	containerName := fmt.Sprintf("/%s-%s-runtime", config.Name, config.Environment)
-	err = engine.ContainerCreateAndStart(ctx, ContainerCreateAndStartOpts{
-		name:    fmt.Sprintf("splat-%s-%s", config.Name, config.Environment),
-		image:   config.Name,
-		replace: true,
-		networkMap: []PortMapping{{
-			HostAddr:      "0.0.0.0",
-			HostPort:      "3001",
-			ContainerPort: "8080",
-			Protocol:      "tcp",
-		}},
+	containerName := fmt.Sprintf("/splat-%s-%s-runtime", config.Name, config.Environment)
+	containerId, err := engine.ContainerCreateAndStart(ctx, ContainerCreateAndStartOpts{
+		name:       containerName,
+		image:      config.ContainerImg,
+		replace:    true,
+		networkMap: []PortMapping{mainPortMapping},
 	})
 	if err != nil {
 		return err
 	}
 
-	log.Info("Started container", "id", containerName)
+	log.Info("Started container", "id", containerName, "port", port)
+
+	RunningContainerData[uid] = RunningAppData{
+		config:        config,
+		containerName: containerName,
+		containerId:   containerId,
+		internalPort:  strconv.Itoa(port),
+	}
 
 	return nil
 }
 
 func main() {
+	RunningContainerData = make(map[string]RunningAppData)
 	log.SetLevel(log.DebugLevel)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -138,7 +167,7 @@ func main() {
 			switch <-signals {
 			case syscall.SIGINFO:
 				// Should print some info out...
-				log.Info("Hello siginfo", "containers", engine.containers)
+				log.Info("Hello siginfo", "containers", RunningContainerData)
 			case syscall.SIGHUP:
 				// Reload the config
 				log.Info("Should be reloading config")
@@ -154,9 +183,13 @@ func main() {
 		go func(configPath string) {
 			defer wg.Done()
 			appConfig := new(AppConfig)
-			err := gonk.LoadConfig(appConfig, gonk.FileLoader(configPath, false))
+			err := gonk.LoadConfig(
+				appConfig,
+				gonk.FileLoader(configPath, false),
+			)
 			if err != nil {
 				errs[configPath] = err
+				return
 			}
 
 			// for now

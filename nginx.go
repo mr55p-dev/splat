@@ -33,13 +33,13 @@ func WithNginxPath(path string) ServiceManagerOption {
 	}
 }
 
-func NewServiceManager(ctx context.Context, opts ...ServiceManagerOption) (*ServiceManager, error) {
+func NewServiceManager(ctx context.Context, options ...ServiceManagerOption) (*ServiceManager, error) {
 	manager := &ServiceManager{
 		nginxBasePath: "/etc/nginx/conf.d",
 	}
 
-	for _, v := range opts {
-		v(manager)
+	for _, option := range options {
+		option(manager)
 	}
 
 	return manager, nil

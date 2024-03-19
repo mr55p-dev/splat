@@ -174,13 +174,13 @@ type ContainerCreateAndStartOpts struct {
 	replace     bool
 }
 
-func (engine *DockerEngine) ContainerCreateAndStart(ctx context.Context, opts ContainerCreateAndStartOpts) error {
+func (engine *DockerEngine) ContainerCreateAndStart(ctx context.Context, opts ContainerCreateAndStartOpts) (string, error) {
 	containerId := opts.name
 	log.Info("Operating container", "containerId", containerId, "imageId", opts.image)
 	if opts.replace {
 		err := engine.ContainerStopAndRemove(ctx, containerId)
 		if err != nil {
-			return err
+			return "", err
 		}
 	}
 	// Get the network configuration
@@ -206,7 +206,7 @@ func (engine *DockerEngine) ContainerCreateAndStart(ctx context.Context, opts Co
 		nil, nil, containerId,
 	)
 	if err != nil {
-		return fmt.Errorf("Failed to create container: %s", err.Error())
+		return "", fmt.Errorf("Failed to create container: %s", err.Error())
 	}
 	log.Info("Created container", "id", containerCreate.ID)
 	engine.containers[containerId] = containerCreate.ID
@@ -216,14 +216,14 @@ func (engine *DockerEngine) ContainerCreateAndStart(ctx context.Context, opts Co
 		container.StartOptions{},
 	)
 	if err != nil {
-		return fmt.Errorf("Failed to start container: %s", err)
+		return containerCreate.ID, fmt.Errorf("Failed to start container: %s", err)
 	}
 
 	// err = engine.ContainerListen(ctx, containerId, engine.containerLogFile)
 	// if err != nil {
 	// 	return err
 	// }
-	return nil
+	return containerCreate.ID, nil
 }
 
 func (engine *DockerEngine) ContainerListen(ctx context.Context, containerId string, w io.Writer) error {

@@ -1,6 +1,0 @@
-{"status":"Pulling from pagemail","id":"latest"}
-{"status":"Digest: sha256:6d40b17b9e89a657f2e51cf71343cb606ae3d23e802fef444abb8dbeeaf9a100"}
-{"status":"Status: Image is up to date for 168938868801.dkr.ecr.eu-west-2.amazonaws.com/pagemail:latest"}
-{"status":"Pulling from example","id":"latest"}
-{"status":"Digest: sha256:f3294ced6335e8a2622d6250c13b61e1c7e3098d7ee8a4380b6b56ea281bb0bb"}
-{"status":"Status: Image is up to date for 168938868801.dkr.ecr.eu-west-2.amazonaws.com/example:latest"}
