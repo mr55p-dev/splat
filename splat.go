@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/charmbracelet/log"
@@ -137,11 +138,7 @@ func main() {
 			switch <-signals {
 			case syscall.SIGINFO:
 				// Should print some info out...
-				containers := make([]string, len(engine.containers))
-				for key := range engine.containers {
-					containers = append(containers, key)
-				}
-				log.Info("Hello siginfo", "containers", containers)
+				log.Info("Hello siginfo", "containers", engine.containers)
 			case syscall.SIGHUP:
 				// Reload the config
 				log.Info("Should be reloading config")
@@ -151,23 +148,27 @@ func main() {
 		}
 	}()
 
+	wg := sync.WaitGroup{}
 	for _, configPath := range StartupApps {
-		appConfig := new(AppConfig)
-		err := gonk.LoadConfig(appConfig, gonk.FileLoader(configPath, false))
-		if err != nil {
-			errs[configPath] = err
-			continue
-		}
+		wg.Add(1)
+		go func(configPath string) {
+			defer wg.Done()
+			appConfig := new(AppConfig)
+			err := gonk.LoadConfig(appConfig, gonk.FileLoader(configPath, false))
+			if err != nil {
+				errs[configPath] = err
+			}
 
-		// for now
-		appConfig.LoginToken = LOGIN_TOKEN
+			// for now
+			appConfig.LoginToken = LOGIN_TOKEN
 
-		err = startupApp(ctx, appConfig, engine, manager)
-		if err != nil {
-			errs[configPath] = err
-			continue
-		}
+			err = startupApp(ctx, appConfig, engine, manager)
+			if err != nil {
+				errs[configPath] = err
+			}
+		}(configPath)
 	}
+	wg.Wait()
 
 	for key, val := range errs {
 		if val != nil {
