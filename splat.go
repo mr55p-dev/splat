@@ -113,7 +113,7 @@ func main() {
 	}
 	defer engine.Close()
 
-	manager, err := NewServiceManager(ctx, WithNginxPath("./nginx/"))
+	manager, err := NewServiceManager(ctx, WithNginxPath("/opt/homebrew/etc/nginx/"))
 	if err != nil {
 		panic(err)
 	}

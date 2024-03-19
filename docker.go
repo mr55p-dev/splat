@@ -13,6 +13,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/registry"
 	"github.com/docker/docker/client"
+	"github.com/docker/go-connections/nat"
 )
 
 type DockerEngine struct {
@@ -169,8 +170,20 @@ func (engine *DockerEngine) ContainerCreateAndStart(ctx context.Context, name, i
 		ctx,
 		&container.Config{
 			Image: image,
+			ExposedPorts: nat.PortSet{
+				"3001/tcp": struct{}{},
+			},
 		},
-		nil, nil, nil, name,
+		&container.HostConfig{
+			PortBindings: nat.PortMap{
+				"3001/tcp": []nat.PortBinding{
+					{
+						HostIP:   "0.0.0.0",
+						HostPort: "3000",
+					},
+				},
+			},
+		}, nil, nil, name,
 	)
 	if err != nil {
 		return fmt.Errorf("Failed to create container: %s", err.Error())
@@ -187,8 +200,4 @@ func (engine *DockerEngine) ContainerCreateAndStart(ctx context.Context, name, i
 	}
 
 	return nil
-}
-
-func getContainerId(imageName, environment string) string {
-	return fmt.Sprintf("/%s-%s-runtime", imageName, environment)
 }
