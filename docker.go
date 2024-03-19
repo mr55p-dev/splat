@@ -219,21 +219,27 @@ func (engine *DockerEngine) ContainerCreateAndStart(ctx context.Context, opts Co
 		return containerCreate.ID, fmt.Errorf("Failed to start container: %s", err)
 	}
 
-	// err = engine.ContainerListen(ctx, containerId, engine.containerLogFile)
-	// if err != nil {
-	// 	return err
-	// }
+	err = engine.ContainerListen(ctx, containerId, engine.containerLogFile)
+	if err != nil {
+		return containerCreate.ID, err
+	}
 	return containerCreate.ID, nil
 }
 
 func (engine *DockerEngine) ContainerListen(ctx context.Context, containerId string, w io.Writer) error {
-	r, err := engine.docker.ContainerLogs(ctx, containerId, container.LogsOptions{})
-	if err != nil {
-		return err
-	}
 	go func() {
+		r, err := engine.docker.ContainerLogs(ctx, containerId, container.LogsOptions{
+			ShowStdout: true,
+			ShowStderr: true,
+			Follow:     true,
+		})
+		if err != nil {
+			return
+		}
+
 		defer r.Close()
 		io.Copy(w, r)
 	}()
+
 	return nil
 }
