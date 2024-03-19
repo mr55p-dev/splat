@@ -1,8 +1,0 @@
----
-name: pagemail
-environment: prd
-ecr:
-  repository: 168938868801.dkr.ecr.eu-west-2.amazonaws.com/pagemail
-net:
-  external: https://pagemail.io
-  internal: http://127.0.0.1:3001

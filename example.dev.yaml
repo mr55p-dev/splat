@@ -1,0 +1,8 @@
+---
+name: example
+environment: dev
+ecr:
+  repository: 168938868801.dkr.ecr.eu-west-2.amazonaws.com/example
+net:
+  external: https://example.pagemail.io
+  internal: http://0.0.0.0:5000

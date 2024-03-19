@@ -171,12 +171,12 @@ func (engine *DockerEngine) ContainerCreateAndStart(ctx context.Context, name, i
 		&container.Config{
 			Image: image,
 			ExposedPorts: nat.PortSet{
-				"3001/tcp": struct{}{},
+				"8080/tcp": struct{}{},
 			},
 		},
 		&container.HostConfig{
 			PortBindings: nat.PortMap{
-				"3001/tcp": []nat.PortBinding{
+				"8080/tcp": []nat.PortBinding{
 					{
 						HostIP:   "0.0.0.0",
 						HostPort: "3000",

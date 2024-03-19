@@ -32,7 +32,10 @@ import (
 	"github.com/mr55p-dev/gonk"
 )
 
-var StartupApps []string = []string{"app.prd.yaml"}
+var StartupApps []string = []string{
+	"pagemail.prd.yaml",
+	"example.dev.yaml",
+}
 
 func fatal(msg string, err error) {
 	log.Fatal(msg, "error", err)

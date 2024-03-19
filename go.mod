@@ -4,8 +4,8 @@ go 1.22.0
 
 require (
 	github.com/charmbracelet/log v0.3.1
-	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
 	github.com/docker/docker v25.0.4+incompatible
+	github.com/docker/go-connections v0.5.0
 	github.com/mr55p-dev/gonk v0.0.0-20240312084028-4e975b14d668
 )
 
@@ -15,13 +15,11 @@ require (
 	github.com/charmbracelet/lipgloss v0.9.1 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/distribution/reference v0.5.0 // indirect
-	github.com/docker/go-connections v0.5.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
 	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/godbus/dbus v4.1.0+incompatible // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.18 // indirect
