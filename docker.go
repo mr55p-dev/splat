@@ -21,10 +21,18 @@ type DockerEngine struct {
 	dockerLogFile    io.Writer
 	containerLogFile io.Writer
 	token            string
-	containers       map[string]string
+	container        string
 }
 
-func NewDockerEnigne(ctx context.Context, token string) (*DockerEngine, error) {
+func NewDockerClient(ctx context.Context) (*client.Client, error) {
+	docker, err := client.NewClientWithOpts(client.FromEnv)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to start the docker engine client: %s", err.Error())
+	}
+	return docker, nil
+}
+
+func NewDockerEnigne(ctx context.Context, client *client.Client) (*DockerEngine, error) {
 
 	dockerLog, err := os.Create("doker-engine.log")
 	if err != nil {
@@ -35,26 +43,21 @@ func NewDockerEnigne(ctx context.Context, token string) (*DockerEngine, error) {
 		return nil, fmt.Errorf("Error creating app log: %s", err.Error())
 	}
 
-	// pull the latest container image from ECR
-	docker, err := client.NewClientWithOpts(client.FromEnv)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to start the docker engine client: %s", err.Error())
-	}
-
 	engine := &DockerEngine{
-		docker:           docker,
+		docker:           client,
 		dockerLogFile:    dockerLog,
 		containerLogFile: appLog,
-		containers:       make(map[string]string),
 	}
 
 	return engine, nil
 }
 
 func (engine *DockerEngine) Close() error {
-	for key := range engine.containers {
-		engine.ContainerStopAndRemove(context.Background(), key)
-	}
+	engine.ContainerStopAndRemove(
+		context.Background(),
+		engine.container,
+	)
+
 	return engine.docker.Close()
 }
 
@@ -85,7 +88,7 @@ func (engine *DockerEngine) ImagePull(ctx context.Context, repo, tag string) err
 	}
 	defer img.Close()
 	_, err = io.Copy(engine.dockerLogFile, img)
-	log.Info("Pulling image")
+	log.Debug("Pulling image")
 
 	if err != nil {
 		return fmt.Errorf("Failed to read image data: %s", err.Error())
@@ -116,7 +119,6 @@ func (engine *DockerEngine) ContainerRemove(ctx context.Context, containerName s
 		return err
 	}
 	log.Debug("Removed container", "containerId", containerName)
-	delete(engine.containers, containerName)
 	return nil
 }
 
@@ -131,14 +133,11 @@ func (engine *DockerEngine) ContainerStopAndRemove(ctx context.Context, containe
 	}
 
 	for _, container := range containers {
-		if container.ID == engine.containers[containerName] {
-
+		if container.ID == engine.container {
 			log.Debug(
 				"Found existing container",
-				"containerId",
-				container.ID,
-				"containerState",
-				container.State,
+				"containerId", container.ID,
+				"containerState", container.State,
 			)
 			if container.State == "running" {
 				err = engine.ContainerStop(ctx, container.ID)
@@ -176,7 +175,6 @@ type ContainerCreateAndStartOpts struct {
 
 func (engine *DockerEngine) ContainerCreateAndStart(ctx context.Context, opts ContainerCreateAndStartOpts) (string, error) {
 	containerId := opts.name
-	log.Info("Operating container", "containerId", containerId, "imageId", opts.image)
 	if opts.replace {
 		err := engine.ContainerStopAndRemove(ctx, containerId)
 		if err != nil {
@@ -208,8 +206,8 @@ func (engine *DockerEngine) ContainerCreateAndStart(ctx context.Context, opts Co
 	if err != nil {
 		return "", fmt.Errorf("Failed to create container: %s", err.Error())
 	}
-	log.Info("Created container", "id", containerCreate.ID)
-	engine.containers[containerId] = containerCreate.ID
+	log.Debug("Created container", "id", containerCreate.ID)
+	engine.container = containerCreate.ID
 	err = engine.docker.ContainerStart(
 		ctx,
 		containerCreate.ID,

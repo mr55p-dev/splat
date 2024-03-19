@@ -31,6 +31,7 @@ import (
 	"syscall"
 
 	"github.com/charmbracelet/log"
+	"github.com/docker/docker/client"
 	"github.com/mr55p-dev/gonk"
 )
 
@@ -45,6 +46,7 @@ func fatal(msg string, err error) {
 
 type RunningAppData struct {
 	config        *AppConfig
+	engine        *DockerEngine
 	containerId   string
 	containerName string
 	internalPort  string
@@ -64,13 +66,18 @@ type AppConfig struct {
 	LoginToken    string
 }
 
-func startupApp(ctx context.Context, config *AppConfig, engine *DockerEngine, serviceManager *ServiceManager) error {
+func startupApp(ctx context.Context, portCounter *Counter, config *AppConfig, dockerClient *client.Client, serviceManager *ServiceManager) error {
 	uid := fmt.Sprintf(
 		"%s.%s.%s",
 		config.Name,
 		config.Environment,
 		generateId(),
 	)
+	engine, err := NewDockerEnigne(ctx, dockerClient)
+	if err != nil {
+		return err
+	}
+
 	// If we have a ECR url pull the image
 	if config.ContainerEcr != "" {
 		log.Info("Pulling image from AWS", "repo", config.ContainerEcr)
@@ -84,8 +91,7 @@ func startupApp(ctx context.Context, config *AppConfig, engine *DockerEngine, se
 	log.Info("Using app config")
 	log.Printf("%+v", config)
 
-	// Get a port and generate a mapping
-	port := generatePort(10000, 10100)
+	port := portCounter.next()
 	mainPortMapping := PortMapping{
 		ContainerPort: strconv.Itoa(config.ContainerPort),
 		HostPort:      strconv.Itoa(port),
@@ -122,9 +128,14 @@ func startupApp(ctx context.Context, config *AppConfig, engine *DockerEngine, se
 		return err
 	}
 
-	log.Info("Started container", "id", containerName, "port", port)
+	log.Info("Started container",
+		"name", containerName,
+		"id", containerId,
+		"port", port,
+	)
 
 	RunningContainerData[uid] = RunningAppData{
+		engine:        engine,
 		config:        config,
 		containerName: containerName,
 		containerId:   containerId,
@@ -150,11 +161,6 @@ func main() {
 	errs := make(map[string]error)
 
 	LOGIN_TOKEN := os.Getenv("ECR_TOKEN")
-	engine, err := NewDockerEnigne(ctx, LOGIN_TOKEN)
-	if err != nil {
-		panic(err)
-	}
-	defer engine.Close()
 
 	manager, err := NewServiceManager(ctx, WithNginxPath("/opt/homebrew/etc/nginx/"))
 	if err != nil {
@@ -167,7 +173,14 @@ func main() {
 			switch <-signals {
 			case syscall.SIGINFO:
 				// Should print some info out...
-				log.Info("Hello siginfo", "containers", RunningContainerData)
+				log.Info("Process info")
+				for key, info := range RunningContainerData {
+					log.Info("", "process", key,
+						"Container ID", info.containerId,
+						"Container name", info.containerName,
+						"Port", info.internalPort,
+					)
+				}
 			case syscall.SIGHUP:
 				// Reload the config
 				log.Info("Should be reloading config")
@@ -176,6 +189,14 @@ func main() {
 			}
 		}
 	}()
+
+	// Setup the docker engine
+	engine, err := NewDockerClient(ctx)
+	if err != nil {
+		panic(err)
+	}
+
+	portCounter := NewCounter(10000)
 
 	wg := sync.WaitGroup{}
 	for _, configPath := range StartupApps {
@@ -192,10 +213,9 @@ func main() {
 				return
 			}
 
-			// for now
+			// Setup the docker client
 			appConfig.LoginToken = LOGIN_TOKEN
-
-			err = startupApp(ctx, appConfig, engine, manager)
+			err = startupApp(ctx, portCounter, appConfig, engine, manager)
 			if err != nil {
 				errs[configPath] = err
 			}
@@ -211,4 +231,7 @@ func main() {
 
 	// Wait until signals arrive
 	<-ctx.Done()
+	for _, info := range RunningContainerData {
+		info.engine.Close()
+	}
 }
