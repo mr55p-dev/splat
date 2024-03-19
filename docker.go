@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/charmbracelet/log"
 	"github.com/docker/docker/api/types"
@@ -32,21 +33,40 @@ func NewDockerClient(ctx context.Context) (*client.Client, error) {
 	return docker, nil
 }
 
-func NewDockerEnigne(ctx context.Context, client *client.Client) (*DockerEngine, error) {
+type DockerEngineOpt func(*DockerEngine) error
 
-	dockerLog, err := os.Create("doker-engine.log")
-	if err != nil {
-		return nil, fmt.Errorf("Error creating log file: %s", err.Error())
+func DockerWithLogFiles(path, name string) DockerEngineOpt {
+	return func(de *DockerEngine) error {
+		dockerLog, err := os.Create(filepath.Join(
+			path,
+			fmt.Sprintf("%s-doker-engine.log", name),
+		))
+		if err != nil {
+			return fmt.Errorf("Error creating log file: %s", err.Error())
+		}
+		appLog, err := os.Create(filepath.Join(
+			path,
+			fmt.Sprintf("%s-container.log", name),
+		))
+		if err != nil {
+			return fmt.Errorf("Error creating app log: %s", err.Error())
+		}
+		de.dockerLogFile = dockerLog
+		de.containerLogFile = appLog
+		return nil
 	}
-	appLog, err := os.Create("app.log")
-	if err != nil {
-		return nil, fmt.Errorf("Error creating app log: %s", err.Error())
-	}
+}
 
+func NewDockerEnigne(ctx context.Context, client *client.Client, options ...DockerEngineOpt) (*DockerEngine, error) {
 	engine := &DockerEngine{
-		docker:           client,
-		dockerLogFile:    dockerLog,
-		containerLogFile: appLog,
+		docker: client,
+	}
+
+	for _, fn := range options {
+		err := fn(engine)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return engine, nil
