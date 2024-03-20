@@ -7,3 +7,6 @@ container:
 net:
   external: https://example.pagemail.io
   containerPort: 8080
+volumes:
+  name: data
+  source: "./data"

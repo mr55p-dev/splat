@@ -6,7 +6,7 @@ require (
 	github.com/charmbracelet/log v0.3.1
 	github.com/docker/docker v25.0.4+incompatible
 	github.com/docker/go-connections v0.5.0
-	github.com/mr55p-dev/gonk v0.0.0-20240312084028-4e975b14d668
+	github.com/mr55p-dev/gonk v0.0.0-20240320010149-1718ed4a232e
 )
 
 require (

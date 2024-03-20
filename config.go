@@ -15,15 +15,21 @@ type RunningAppData struct {
 	status        string
 }
 
-var AppContainerData map[string]RunningAppData
+var AppContainerData map[string]*RunningAppData
 
 type AppConfig struct {
-	Name         string `config:"name"`
-	Environment  string `config:"environment"`
-	ContainerEcr string `config:"container.ecr,optional"`
-	ContainerImg string `config:"container.image"`
-	ContainerTag string `config:"container.tag"`
-
+	Name        string `config:"name"`
+	Environment string `config:"environment"`
+	Container   struct {
+		Ecr   string `config:"ecr,optional"`
+		Image string `config:"image"`
+		Tag   string `config:"tag"`
+	} `config:"container"`
 	ExternalHost  string `config:"net.external"`
 	ContainerPort int    `config:"net.containerPort"`
+
+	Volumes struct {
+		Name   string `config:"name"`
+		Source string `config:"source"`
+	} `config:"volumes"`
 }

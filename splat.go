@@ -17,14 +17,15 @@ import (
 var LOGIN_TOKEN string
 
 const (
-	LOG_PATH         = "./logs"
-	LOOPBACK_IP      = "127.0.0.1"
-	NET_PROTOCOL     = "tcp"
-	NGINX_CONFIG_DIR = "/opt/homebrew/etc/nginx/"
+	LOG_PATH          = "./logs"
+	LOOPBACK_IP       = "127.0.0.1"
+	NET_PROTOCOL      = "tcp"
+	NGINX_CONFIG_DIR  = "/opt/homebrew/etc/nginx/"
+	VOLUME_MOUNT_ROOT = "/volumes"
 )
 
-func NewAppContainerData(config *AppConfig) RunningAppData {
-	return RunningAppData{
+func NewAppContainerData(config *AppConfig) *RunningAppData {
+	return &RunningAppData{
 		status: "unknown",
 		config: config,
 		uid: fmt.Sprintf(
@@ -34,6 +35,13 @@ func NewAppContainerData(config *AppConfig) RunningAppData {
 			generateId(),
 		),
 	}
+}
+
+func pullEcrImage(ctx context.Context, engine *DockerEngine, repo, image, tag string) error {
+	log.Info("Pulling image from AWS", "repo", repo)
+	engine.SetAuthFromLoginToken(LOGIN_TOKEN, repo)
+	image = fmt.Sprintf("%s/%s", repo, image)
+	return engine.ImagePull(ctx, image, tag)
 }
 
 func startupApp(
@@ -61,17 +69,20 @@ func startupApp(
 	config := proc.config
 
 	// If we have a ECR url pull the image
-	if proc.config.ContainerEcr != "" {
-		log.Info("Pulling image from AWS", "repo", config.ContainerEcr)
-		proc.engine.SetAuthFromLoginToken(LOGIN_TOKEN, config.ContainerEcr)
-		image := fmt.Sprintf("%s/%s", config.ContainerEcr, config.ContainerImg)
-		err := proc.engine.ImagePull(ctx, image, config.ContainerTag)
+	if proc.config.Container.Ecr != "" {
+		pullEcrImage(
+			ctx, engine,
+			config.Container.Ecr,
+			config.Container.Image,
+			config.Container.Tag,
+		)
 		if err != nil {
 			return err
 		}
 	}
 	log.Info("Using app config")
 
+	// Get the default port mapping
 	port := portCounter.next()
 	mainPortMapping := PortMapping{
 		ContainerPort: strconv.Itoa(config.ContainerPort),
@@ -80,6 +91,12 @@ func startupApp(
 		Protocol:      NET_PROTOCOL,
 	}
 	internalHost := fmt.Sprintf("http://%s:%d", LOOPBACK_IP, port)
+
+	// Get any configured volume mapping
+	mainVolumeMapping := VolumeMapping{
+		Name:   config.Volumes.Name,
+		Source: config.Volumes.Source,
+	}
 
 	// Setup nginx
 	nginxData, err := GenerateNginxConfig(config.ExternalHost, internalHost)
@@ -97,10 +114,11 @@ func startupApp(
 
 	// Launch a docker container
 	containerId, err := proc.engine.ContainerCreateAndStart(ctx, ContainerCreateAndStartOpts{
-		name:       uid,
-		image:      config.ContainerImg,
-		replace:    true,
-		networkMap: []PortMapping{mainPortMapping},
+		name:     uid,
+		image:    config.Container.Image,
+		replace:  true,
+		networks: []PortMapping{mainPortMapping},
+		volumes:  []VolumeMapping{mainVolumeMapping},
 	})
 	if err != nil {
 		return err
@@ -121,8 +139,8 @@ func startupApp(
 func main() {
 	// Initialize
 	LOGIN_TOKEN = os.Getenv("ECR_TOKEN")
-	AppContainerData = make(map[string]RunningAppData)
 	log.SetLevel(log.DebugLevel)
+	AppContainerData = make(map[string]*RunningAppData)
 	portCounter := NewCounter(10000)
 	wg := errgroup.Group{}
 
@@ -160,11 +178,12 @@ func main() {
 
 	// Load the app configs into the data struct
 	for _, configPath := range StartupApps {
+		path := configPath
 		wg.Go(func() error {
 			appConfig := new(AppConfig)
 			err := gonk.LoadConfig(
 				appConfig,
-				gonk.FileLoader(configPath, false),
+				gonk.FileLoader(path, false),
 			)
 			if err != nil {
 				return err
@@ -182,9 +201,10 @@ func main() {
 
 	// Start the app containers
 	for uid := range AppContainerData {
+		id := uid
 		wg.Go(func() error { // Setup the docker client
 			err = startupApp(
-				ctx, portCounter, uid,
+				ctx, portCounter, id,
 				LOG_PATH, engine, manager,
 			)
 			if err != nil {
@@ -200,7 +220,11 @@ func main() {
 
 	// Wait until signals arrive
 	<-ctx.Done()
-	for _, info := range AppContainerData {
-		info.engine.Close()
+	for _, proc := range AppContainerData {
+		if proc.engine != nil {
+			proc.engine.Close()
+		} else {
+			log.Warn("No engine found for application", "uid", proc.uid)
+		}
 	}
 }

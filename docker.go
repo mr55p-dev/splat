@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/registry"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
@@ -21,6 +22,7 @@ type DockerEngine struct {
 	docker           *client.Client
 	dockerLogFile    io.Writer
 	containerLogFile io.Writer
+	volumeRootPath   string
 	token            string
 	container        string
 }
@@ -61,9 +63,23 @@ func DockerWithLogFiles(path, name string) DockerEngineOpt {
 	}
 }
 
+func DockerWithVolumeRoot(path string) DockerEngineOpt {
+	return func(de *DockerEngine) error {
+		path = filepath.Clean(path)
+		if !filepath.IsAbs(path) {
+			return fmt.Errorf("Volume root is not absolute: %s", path)
+		}
+		de.volumeRootPath = path
+		return nil
+	}
+}
+
 func NewDockerEnigne(ctx context.Context, client *client.Client, options ...DockerEngineOpt) (*DockerEngine, error) {
 	engine := &DockerEngine{
-		docker: client,
+		docker:           client,
+		dockerLogFile:    os.Stdout,
+		containerLogFile: os.Stdout,
+		volumeRootPath:   "/volumes",
 	}
 
 	for _, fn := range options {
@@ -191,10 +207,16 @@ func (p *PortMapping) GetHostStr() nat.Port {
 	return nat.Port(fmt.Sprintf("%s/%s", p.ContainerPort, p.Protocol))
 }
 
+type VolumeMapping struct {
+	Name   string
+	Source string
+}
+
 type ContainerCreateAndStartOpts struct {
 	name, image string
-	networkMap  []PortMapping
 	replace     bool
+	networks    []PortMapping
+	volumes     []VolumeMapping
 }
 
 func (engine *DockerEngine) ContainerCreateAndStart(ctx context.Context, opts ContainerCreateAndStartOpts) (string, error) {
@@ -208,13 +230,30 @@ func (engine *DockerEngine) ContainerCreateAndStart(ctx context.Context, opts Co
 	// Get the network configuration
 	portSet := nat.PortSet{}
 	portMap := nat.PortMap{}
-	for _, mapping := range opts.networkMap {
+	for _, mapping := range opts.networks {
 		portSet[mapping.GetHostStr()] = struct{}{}
 		portMap[mapping.GetHostStr()] = []nat.PortBinding{{
 			HostIP:   mapping.HostAddr,
 			HostPort: mapping.HostPort,
 		}}
 	}
+
+	// Get the volume configuration
+	mountSet := make([]mount.Mount, 0, len(opts.volumes))
+	for _, mapping := range opts.volumes {
+		source, err := filepath.Abs(mapping.Source)
+		if err != nil {
+			return "", err
+		}
+		dest := filepath.Join(engine.volumeRootPath, mapping.Name)
+		mountSet = append(mountSet, mount.Mount{
+			Type:   "bind",
+			Source: source,
+			Target: dest,
+		})
+	}
+	fmt.Printf("mountSet: %+v\n", mountSet)
+
 	// Create the container
 	containerCreate, err := engine.docker.ContainerCreate(
 		ctx,
@@ -224,6 +263,7 @@ func (engine *DockerEngine) ContainerCreateAndStart(ctx context.Context, opts Co
 		},
 		&container.HostConfig{
 			PortBindings: portMap,
+			Mounts:       mountSet,
 		},
 		nil, nil, containerId,
 	)
