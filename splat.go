@@ -93,9 +93,12 @@ func startupApp(
 	internalHost := fmt.Sprintf("http://%s:%d", LOOPBACK_IP, port)
 
 	// Get any configured volume mapping
-	mainVolumeMapping := VolumeMapping{
-		Name:   config.Volumes.Name,
-		Source: config.Volumes.Source,
+	var volumes []VolumeMapping
+	for _, vol := range config.Volumes {
+		volumes = append(volumes, VolumeMapping{
+			Name:   vol.Name,
+			Source: vol.Source,
+		})
 	}
 
 	// Setup nginx
@@ -118,7 +121,7 @@ func startupApp(
 		image:    config.Container.Image,
 		replace:  true,
 		networks: []PortMapping{mainPortMapping},
-		volumes:  []VolumeMapping{mainVolumeMapping},
+		volumes:  volumes,
 	})
 	if err != nil {
 		return err
@@ -181,10 +184,11 @@ func main() {
 		path := configPath
 		wg.Go(func() error {
 			appConfig := new(AppConfig)
-			err := gonk.LoadConfig(
-				appConfig,
-				gonk.FileLoader(path, false),
-			)
+			configFile, err := gonk.NewYamlLoader(path)
+			if err != nil {
+				return err
+			}
+			err = gonk.LoadConfig(appConfig, configFile)
 			if err != nil {
 				return err
 			}

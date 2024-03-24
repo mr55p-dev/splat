@@ -28,7 +28,7 @@ type AppConfig struct {
 	ExternalHost  string `config:"net.external"`
 	ContainerPort int    `config:"net.containerPort"`
 
-	Volumes struct {
+	Volumes []struct {
 		Name   string `config:"name"`
 		Source string `config:"source"`
 	} `config:"volumes"`

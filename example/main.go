@@ -7,16 +7,6 @@ import (
 )
 
 func main() {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		log.Println(
-			"Request received",
-			"method",
-			r.Method,
-			"path",
-			r.URL.Path,
-		)
-		w.Write([]byte("ok"))
-	})
 	http.HandleFunc("/data", func(w http.ResponseWriter, r *http.Request) {
 		data, err := os.ReadFile("/volumes/data/file.txt")
 		if err != nil {
@@ -26,6 +16,16 @@ func main() {
 			w.Write(data)
 			w.Header().Set("Content-Type", "text/plain")
 		}
+	})
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		log.Println(
+			"Request received",
+			"method",
+			r.Method,
+			"path",
+			r.URL.Path,
+		)
+		w.Write([]byte("ok"))
 	})
 	log.Println("Starting server")
 	if err := http.ListenAndServe("0.0.0.0:8080", nil); err != nil {
