@@ -29,9 +29,8 @@ func NewAppContainerData(config *AppConfig) *RunningAppData {
 		status: "unknown",
 		config: config,
 		uid: fmt.Sprintf(
-			"%s.%s.%s",
+			"%s.%s",
 			config.Name,
-			config.Environment,
 			generateId(),
 		),
 	}
@@ -106,7 +105,7 @@ func startupApp(
 	if err != nil {
 		return err
 	}
-	err = serviceManager.Install(ctx, nginxData, config.Name, config.Environment)
+	err = serviceManager.Install(ctx, nginxData, config.Name)
 	if err != nil {
 		return err
 	}

@@ -18,9 +18,8 @@ type RunningAppData struct {
 var AppContainerData map[string]*RunningAppData
 
 type AppConfig struct {
-	Name        string `config:"name"`
-	Environment string `config:"environment"`
-	Container   struct {
+	Name      string `config:"name"`
+	Container struct {
 		Ecr   string `config:"ecr,optional"`
 		Image string `config:"image"`
 		Tag   string `config:"tag"`

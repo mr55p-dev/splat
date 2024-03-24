@@ -1,6 +1,5 @@
 ---
 name: example
-environment: dev
 container:
   image: example
   tag: latest

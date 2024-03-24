@@ -67,8 +67,8 @@ func GenerateNginxConfig(externalHost, internalHost string) ([]byte, error) {
 	return output.Bytes(), err
 }
 
-func (sm *ServiceManager) Install(ctx context.Context, data []byte, name, env string) error {
-	configFileName := fmt.Sprintf("splat.%s.%s.conf", name, env)
+func (sm *ServiceManager) Install(ctx context.Context, data []byte, name string) error {
+	configFileName := fmt.Sprintf("splat.%s.conf", name)
 	configPath := filepath.Join(sm.nginxBasePath, configFileName)
 	f, err := os.Create(configPath)
 	if err != nil {
