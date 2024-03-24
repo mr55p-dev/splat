@@ -52,6 +52,7 @@ func (sm *ServiceManager) Close() {
 			log.Error("Error cleaning up", "configFile", file)
 		}
 	}
+	sm.Reload(context.Background())
 }
 
 func GenerateNginxConfig(externalHost, internalHost string) ([]byte, error) {
@@ -67,7 +68,8 @@ func GenerateNginxConfig(externalHost, internalHost string) ([]byte, error) {
 }
 
 func (sm *ServiceManager) Install(ctx context.Context, data []byte, name, env string) error {
-	configPath := filepath.Join(sm.nginxBasePath, fmt.Sprintf("splat.%s.%s.conf", name, env))
+	configFileName := fmt.Sprintf("splat.%s.%s.conf", name, env)
+	configPath := filepath.Join(sm.nginxBasePath, configFileName)
 	f, err := os.Create(configPath)
 	if err != nil {
 		return err
@@ -77,9 +79,6 @@ func (sm *ServiceManager) Install(ctx context.Context, data []byte, name, env st
 		return err
 	}
 	sm.configPaths = append(sm.configPaths, configPath)
+	log.Debug("Created nginx config file", "name", configFileName, "dir", sm.nginxBasePath)
 	return nil
 }
-
-func (sm *ServiceManager) Start(ctx context.Context) error  { return nil }
-func (sm *ServiceManager) Stop(ctx context.Context) error   { return nil }
-func (sm *ServiceManager) Reload(ctx context.Context) error { return nil }

@@ -20,7 +20,7 @@ const (
 	LOG_PATH          = "./logs"
 	LOOPBACK_IP       = "127.0.0.1"
 	NET_PROTOCOL      = "tcp"
-	NGINX_CONFIG_DIR  = "/opt/homebrew/etc/nginx/"
+	NGINX_CONFIG_DIR  = "/opt/homebrew/etc/nginx/servers/"
 	VOLUME_MOUNT_ROOT = "/volumes"
 )
 

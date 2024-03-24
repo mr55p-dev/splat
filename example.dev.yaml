@@ -5,7 +5,7 @@ container:
   image: example
   tag: latest
 net:
-  external: https://example.pagemail.io
+  external: example.com
   containerPort: 8080
 volumes:
   - name: data
