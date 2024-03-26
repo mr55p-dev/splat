@@ -44,6 +44,10 @@ func NewCounter(start int) *Counter {
 	return &Counter{count: start}
 }
 
+// listenForSignals handles signal interrupts.
+// siginfo prints running container information
+// sighup reloads app configs (todo)
+// sigint causes the app to gracefully shutdown
 func listenForSignals(signals chan os.Signal, cancel context.CancelFunc) {
 	for {
 		switch <-signals {
@@ -60,8 +64,10 @@ func listenForSignals(signals chan os.Signal, cancel context.CancelFunc) {
 		case syscall.SIGHUP:
 			// Reload the config
 			log.Info("Should be reloading config")
-		default:
+		case syscall.SIGINT:
+			log.Info("Shutting down...")
 			cancel()
+		default:
 		}
 	}
 }

@@ -42,8 +42,31 @@ func pullEcrImage(ctx context.Context, engine *DockerEngine, repo, image, tag st
 	return engine.ImagePull(ctx, image, tag)
 }
 
-func startupApp(ctx context.Context, opts *startupOptions) error {
-	proc, ok := AppContainerData[opts.uid]
+func LoadFromConfigPath(path string) error {
+	appConfig := new(AppConfig)
+	configFile, err := gonk.NewYamlLoader(path)
+	if err != nil {
+		return err
+	}
+	err = gonk.LoadConfig(appConfig, configFile)
+	if err != nil {
+		return err
+	}
+
+	proc := NewAppContainerData(appConfig)
+	AppContainerData[proc.uid] = proc
+	return nil
+
+}
+
+func startupApp(
+	ctx context.Context,
+	portCounter *Counter,
+	uid, logPath string,
+	dockerClient *client.Client,
+	serviceManager *ServiceManager,
+) error {
+	proc, ok := AppContainerData[uid]
 	if !ok {
 		return fmt.Errorf("process with uid %s not found", opts.uid)
 	}
@@ -142,10 +165,10 @@ func main() {
 	AppContainerData = make(map[string]*RunningAppData)
 	portCounter := NewCounter(10000)
 	wg := errgroup.Group{}
+	wg.SetLimit(-1)
 
 	// Ensure the context is always cancelled
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	// Setup signal listener
 	signals := make(chan os.Signal)
@@ -164,35 +187,23 @@ func main() {
 		WithNginxPath(NGINX_CONFIG_DIR),
 	)
 	if err != nil {
-		panic(err)
+		log.Error(err)
+		os.Exit(1)
 	}
 	defer manager.Close()
 
 	// Setup the docker engine
 	engine, err := NewDockerClient(ctx)
 	if err != nil {
-		panic(err)
+		log.Error(err)
+		os.Exit(1)
 	}
 	defer engine.Close()
 
 	// Load the app configs into the data struct
 	for _, configPath := range StartupApps {
 		path := configPath
-		wg.Go(func() error {
-			appConfig := new(AppConfig)
-			configFile, err := gonk.NewYamlLoader(path)
-			if err != nil {
-				return err
-			}
-			err = gonk.LoadConfig(appConfig, configFile)
-			if err != nil {
-				return err
-			}
-
-			proc := NewAppContainerData(appConfig)
-			AppContainerData[proc.uid] = proc
-			return nil
-		})
+		wg.Go(func() error { return LoadFromConfigPath(path) })
 	}
 	if err := wg.Wait(); err != nil {
 		panic(err)
@@ -217,12 +228,15 @@ func main() {
 		})
 	}
 	if err = wg.Wait(); err != nil {
-		panic(err)
+		log.Error(err)
+		cancel()
+		goto exit
 	}
 	log.Info("Done starting apps")
 
 	// Wait until signals arrive
 	<-ctx.Done()
+exit:
 	for _, proc := range AppContainerData {
 		if proc.engine != nil {
 			proc.engine.Close()
