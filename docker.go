@@ -79,7 +79,7 @@ func NewDockerEnigne(ctx context.Context, client *client.Client, options ...Dock
 		docker:           client,
 		dockerLogFile:    os.Stdout,
 		containerLogFile: os.Stdout,
-		volumeRootPath:   "/volumes",
+		volumeRootPath:   "/",
 	}
 
 	for _, fn := range options {
@@ -252,7 +252,6 @@ func (engine *DockerEngine) ContainerCreateAndStart(ctx context.Context, opts Co
 			Target: dest,
 		})
 	}
-	fmt.Printf("mountSet: %+v\n", mountSet)
 
 	// Create the container
 	containerCreate, err := engine.docker.ContainerCreate(

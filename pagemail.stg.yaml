@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=schema.json
+---
+name: pagemail-stg
+container:
+  repository: 168938868801.dkr.ecr.eu-west-2.amazonaws.com
+  image: pagemail-stg
+  tag: latest
+nginx:
+  server-name: https://stg.pagemail.io
+  container-port: 8080
+volumes:
+  - name: sqlite
+    source: data

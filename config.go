@@ -24,8 +24,8 @@ type AppConfig struct {
 		Image string `config:"image"`
 		Tag   string `config:"tag"`
 	} `config:"container"`
-	ExternalHost  string `config:"net.external"`
-	ContainerPort int    `config:"net.containerPort"`
+	ExternalHost  string `config:"nginx.server-name"`
+	ContainerPort int    `config:"nginx.container-port"`
 
 	Volumes []struct {
 		Name   string `config:"name"`

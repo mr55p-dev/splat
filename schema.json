@@ -1,0 +1,75 @@
+{
+    "type": "object",
+    "properties": {
+        "name": {
+            "type": "string",
+            "description": "Application name"
+        },
+        "container": {
+            "type": "object",
+            "description": "Configuration for the docker container fetching step",
+            "properties": {
+                "image": {
+                    "type": "string",
+                    "description": "Name of the image within a registry to pull"
+                },
+                "tag": {
+                    "type": "string",
+                    "description": "Tag of the image to pull"
+                },
+                "registry": {
+                    "type": "string",
+                    "description": "Docker registry to use",
+                    "default": "docker hub"
+                }
+            },
+            "required": [
+                "image",
+                "tag"
+            ]
+        },
+        "nginx": {
+            "type": "object",
+            "description": "Container networking configuration. Specifies a mapping from a host port to a virtual nginx server available on the host machine.",
+            "properties": {
+                "server-name": {
+                    "type": "string",
+                    "description": "Host header name for nginx to match server requests against"
+                },
+                "container-port": {
+                    "type": "integer",
+                    "description": "Port within the container onto which TCP connections can be made"
+                }
+            },
+            "required": [
+                "server-name",
+                "container-port"
+            ]
+        },
+        "volumes": {
+            "type": "array",
+            "description": "Additional data volumes to mount for the container",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Alias name for the volume to be mounted in the container under"
+                    },
+                    "source": {
+                        "type": "string",
+                        "description": "Data directory to store info under on the host."
+                    }
+                },
+                "required": [
+                    "name",
+                    "source"
+                ]
+            }
+        }
+    },
+    "required": [
+        "name",
+        "container"
+    ]
+}

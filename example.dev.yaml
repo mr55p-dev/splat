@@ -1,11 +1,12 @@
+# yaml-language-server: $schema=schema.json
 ---
-name: example
+name: example-dev
 container:
   image: example
   tag: latest
-net:
-  external: example.com
-  containerPort: 8080
+nginx:
+  server-name: dev.example.com
+  container-port: 8080
 volumes:
   - name: data
-    source: "./data"
+    source: "data"

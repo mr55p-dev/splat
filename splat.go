@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
-	"golang.org/x/sync/errgroup"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"syscall"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/charmbracelet/log"
 	"github.com/docker/docker/client"
@@ -17,11 +19,12 @@ import (
 var LOGIN_TOKEN string
 
 const (
-	LOG_PATH          = "./logs"
-	LOOPBACK_IP       = "127.0.0.1"
-	NET_PROTOCOL      = "tcp"
-	NGINX_CONFIG_DIR  = "/opt/homebrew/etc/nginx/servers/"
-	VOLUME_MOUNT_ROOT = "/volumes"
+	LOG_PATH           = "./logs"
+	LOOPBACK_IP        = "127.0.0.1"
+	NET_PROTOCOL       = "tcp"
+	NGINX_CONFIG_DIR   = "/opt/homebrew/etc/nginx/servers/"
+	VOLUME_TARGET_ROOT = "/volumes"
+	VOLUME_SOURCE_ROOT = "."
 )
 
 func NewAppContainerData(config *AppConfig) *RunningAppData {
@@ -60,6 +63,7 @@ func startupApp(
 		ctx,
 		dockerClient,
 		DockerWithLogFiles(logPath, uid),
+		DockerWithVolumeRoot(VOLUME_TARGET_ROOT),
 	)
 	if err != nil {
 		return err
@@ -94,9 +98,12 @@ func startupApp(
 	// Get any configured volume mapping
 	var volumes []VolumeMapping
 	for _, vol := range config.Volumes {
+		if !filepath.IsLocal(vol.Source) {
+			return fmt.Errorf("Volume sources must be absolute paths: %s", vol.Source)
+		}
 		volumes = append(volumes, VolumeMapping{
 			Name:   vol.Name,
-			Source: vol.Source,
+			Source: filepath.Join(VOLUME_SOURCE_ROOT, vol.Source),
 		})
 	}
 
