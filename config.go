@@ -1,5 +1,7 @@
 package main
 
+import "fmt"
+
 var StartupApps []string = []string{
 	// "pagemail.prd.yaml",
 	"example.dev.yaml",
@@ -31,4 +33,16 @@ type AppConfig struct {
 		Name   string `config:"name"`
 		Source string `config:"source"`
 	} `config:"volumes"`
+}
+
+func NewAppContainerData(config *AppConfig) *RunningAppData {
+	return &RunningAppData{
+		status: "unknown",
+		config: config,
+		uid: fmt.Sprintf(
+			"%s.%s",
+			config.Name,
+			generateId(),
+		),
+	}
 }

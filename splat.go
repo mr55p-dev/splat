@@ -27,18 +27,6 @@ const (
 	VOLUME_SOURCE_ROOT = "."
 )
 
-func NewAppContainerData(config *AppConfig) *RunningAppData {
-	return &RunningAppData{
-		status: "unknown",
-		config: config,
-		uid: fmt.Sprintf(
-			"%s.%s",
-			config.Name,
-			generateId(),
-		),
-	}
-}
-
 func pullEcrImage(ctx context.Context, engine *DockerEngine, repo, image, tag string) error {
 	log.Info("Pulling image from AWS", "repo", repo)
 	engine.SetAuthFromLoginToken(LOGIN_TOKEN, repo)
@@ -46,23 +34,28 @@ func pullEcrImage(ctx context.Context, engine *DockerEngine, repo, image, tag st
 	return engine.ImagePull(ctx, image, tag)
 }
 
+type startupOptions struct {
+	portCounter    *Counter
+	uid            string
+	logPath        string
+	dockerClient   *client.Client
+	serviceManager *ServiceManager
+}
+
 func startupApp(
 	ctx context.Context,
-	portCounter *Counter,
-	uid, logPath string,
-	dockerClient *client.Client,
-	serviceManager *ServiceManager,
+	opts *startupOptions,
 ) error {
-	proc, ok := AppContainerData[uid]
+	proc, ok := AppContainerData[opts.uid]
 	if !ok {
-		return fmt.Errorf("process with uid %s not found", uid)
+		return fmt.Errorf("process with uid %s not found", opts.uid)
 	}
 
 	// start the docker engine client
 	engine, err := NewDockerEnigne(
 		ctx,
-		dockerClient,
-		DockerWithLogFiles(logPath, uid),
+		opts.dockerClient,
+		DockerWithLogFiles(opts.logPath, opts.uid),
 		DockerWithVolumeRoot(VOLUME_TARGET_ROOT),
 	)
 	if err != nil {
@@ -86,7 +79,7 @@ func startupApp(
 	log.Info("Using app config")
 
 	// Get the default port mapping
-	port := portCounter.next()
+	port := opts.portCounter.next()
 	mainPortMapping := PortMapping{
 		ContainerPort: strconv.Itoa(config.ContainerPort),
 		HostPort:      strconv.Itoa(port),
@@ -112,18 +105,18 @@ func startupApp(
 	if err != nil {
 		return err
 	}
-	err = serviceManager.Install(ctx, nginxData, config.Name)
+	err = opts.serviceManager.Install(ctx, nginxData, config.Name)
 	if err != nil {
 		return err
 	}
-	err = serviceManager.Reload(ctx)
+	err = opts.serviceManager.Reload(ctx)
 	if err != nil {
 		return err
 	}
 
 	// Launch a docker container
 	containerId, err := proc.engine.ContainerCreateAndStart(ctx, ContainerCreateAndStartOpts{
-		name:     uid,
+		name:     opts.uid,
 		image:    config.Container.Image,
 		replace:  true,
 		networks: []PortMapping{mainPortMapping},
@@ -134,12 +127,12 @@ func startupApp(
 	}
 
 	log.Info("Started container",
-		"name", uid,
+		"name", opts.uid,
 		"id", containerId,
 		"port", port,
 	)
 
-	proc.containerName = uid
+	proc.containerName = opts.uid
 	proc.containerId = containerId
 	proc.internalPort = strconv.Itoa(port)
 	return nil
@@ -213,10 +206,13 @@ func main() {
 	for uid := range AppContainerData {
 		id := uid
 		wg.Go(func() error { // Setup the docker client
-			err = startupApp(
-				ctx, portCounter, id,
-				LOG_PATH, engine, manager,
-			)
+			err = startupApp(ctx, &startupOptions{
+				portCounter:    portCounter,
+				uid:            id,
+				logPath:        LOG_PATH,
+				dockerClient:   engine,
+				serviceManager: manager,
+			})
 			if err != nil {
 				return err
 			}
