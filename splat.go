@@ -18,6 +18,14 @@ import (
 
 var LOGIN_TOKEN string
 
+type startupOptions struct {
+	portCounter    *Counter
+	uid            string
+	logPath        string
+	dockerClient   *client.Client
+	serviceManager *ServiceManager
+}
+
 const (
 	LOG_PATH           = "./logs"
 	LOOPBACK_IP        = "127.0.0.1"
@@ -34,18 +42,7 @@ func pullEcrImage(ctx context.Context, engine *DockerEngine, repo, image, tag st
 	return engine.ImagePull(ctx, image, tag)
 }
 
-type startupOptions struct {
-	portCounter    *Counter
-	uid            string
-	logPath        string
-	dockerClient   *client.Client
-	serviceManager *ServiceManager
-}
-
-func startupApp(
-	ctx context.Context,
-	opts *startupOptions,
-) error {
+func startupApp(ctx context.Context, opts *startupOptions) error {
 	proc, ok := AppContainerData[opts.uid]
 	if !ok {
 		return fmt.Errorf("process with uid %s not found", opts.uid)
