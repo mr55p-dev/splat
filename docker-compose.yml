@@ -1,0 +1,85 @@
+version: "3"
+name: splat
+services:
+  reverse-proxy:
+    image: traefik:v3.0
+    container_name: traefik
+    restart: always
+    ports:
+      - 80:80
+      - 443:443
+      - 8080:8080
+    expose:
+      - 80
+      - 443
+      - 8080
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /home/ubuntu/traefik:/etc/traefik
+    networks:
+      - traefik
+      - default
+
+networks:
+  traefik:
+    name: traefik_proxy
+    external: true
+
+# otel
+  # opentel-collector:
+  #   image: otel/opentelemetry-collector:0.99.0
+  #   container_name: opentelemetry-collector
+  #   volumes:
+  #     - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+  #   ports:
+  #     - 1888:1888 # pprof extension
+  #     - 8888:8888 # Prometheus metrics exposed by the Collector
+  #     - 8889:8889 # Prometheus exporter metrics
+  #     - 4317:4317 # OTLP gRPC receiver
+  #     - 4318:4318 # OTLP http receiver
+  #     - 13133:13133 # health_check extension
+  #     - 55679:55679 # zpages extension
+  #   networks:
+  #     - otel-collector
+
+#   opensearch-node1:
+#     image: opensearchproject/opensearch:latest
+#     container_name: opensearch-node1
+#     environment:
+#       - cluster.name=opensearch-cluster
+#       - node.name=opensearch-node1
+#       - discovery.seed_hosts=opensearch-node1
+#       - cluster.initial_master_nodes=opensearch-node1
+#       - cluster.initial_cluster_manager_nodes=opensearch-node1
+#       - bootstrap.memory_lock=true 
+#       - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m 
+#       - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD} 
+#       - DISABLE_INSTALL_DEMO_CONFIG=true
+#     ulimits:
+#       memlock:
+#         soft: -1
+#         hard: -1
+#       nofile:
+#         soft: 65536 # maximum number of open files for the OpenSearch user, set to at least 65536 on modern systems
+#         hard: 65536
+#     volumes:
+#       - opensearch-data1:/usr/share/opensearch/data
+#     Gorts:
+#       - 9200:9200
+#       - 9600:9600 # required for Performance Analyzer
+#     networks:
+#       - opensearch-net
+#   opensearch-dashboards:
+#     image: opensearchproject/opensearch-dashboards:latest
+#     container_name: opensearch-dashboards
+#     ports:
+#       - 5601:5601
+#     expose:
+#       - "5601"
+#     environment:
+#       OPENSEARCH_HOSTS: '["https://opensearch-node1:9200"]'
+#     networks:
+#       - opensearch-net
+#     labels:
+#       - "traefik.http.routers.opensearch.rule=Host(`opensearch.pagemail.io`)"
+#       - "traefik.http.routers.opensearch.tls.certresolver=letsencrypt"
