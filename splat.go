@@ -16,7 +16,10 @@ import (
 	"github.com/mr55p-dev/gonk"
 )
 
-var LOGIN_TOKEN string
+var (
+	LOGIN_TOKEN  string
+	PORT_COUNTER *Counter
+)
 
 type startupOptions struct {
 	portCounter    *Counter
@@ -54,7 +57,7 @@ func LoadFromConfigPath(path string) error {
 	}
 
 	proc := NewAppContainerData(appConfig)
-	AppContainerData[proc.uid] = proc
+	RUNNING_CONTAINER_DATA[proc.uid] = proc
 	return nil
 
 }
@@ -66,7 +69,7 @@ func startupApp(
 	dockerClient *client.Client,
 	serviceManager *ServiceManager,
 ) error {
-	proc, ok := AppContainerData[uid]
+	proc, ok := RUNNING_CONTAINER_DATA[uid]
 	if !ok {
 		return fmt.Errorf("process with uid %s not found", opts.uid)
 	}
@@ -158,16 +161,16 @@ func startupApp(
 	return nil
 }
 
-func main() {
-	// Initialize
-	LOGIN_TOKEN = os.Getenv("ECR_TOKEN")
+func init() {
 	log.SetLevel(log.DebugLevel)
-	AppContainerData = make(map[string]*RunningAppData)
-	portCounter := NewCounter(10000)
+	LOGIN_TOKEN = os.Getenv("ECR_TOKEN")
+	PORT_COUNTER = NewCounter(10000)
+	RUNNING_CONTAINER_DATA = make(map[string]*RunningAppData)
+}
+
+func main() {
 	wg := errgroup.Group{}
 	wg.SetLimit(-1)
-
-	// Ensure the context is always cancelled
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Setup signal listener
@@ -187,16 +190,14 @@ func main() {
 		WithNginxPath(NGINX_CONFIG_DIR),
 	)
 	if err != nil {
-		log.Error(err)
-		os.Exit(1)
+		handleExit(err)
 	}
 	defer manager.Close()
 
 	// Setup the docker engine
 	engine, err := NewDockerClient(ctx)
 	if err != nil {
-		log.Error(err)
-		os.Exit(1)
+		handleExit(err)
 	}
 	defer engine.Close()
 
@@ -206,21 +207,18 @@ func main() {
 		wg.Go(func() error { return LoadFromConfigPath(path) })
 	}
 	if err := wg.Wait(); err != nil {
-		panic(err)
+		handleExit(err)
 	}
 	log.Info("Done reading configs")
 
 	// Start the app containers
-	for uid := range AppContainerData {
+	for uid := range RUNNING_CONTAINER_DATA {
 		id := uid
 		wg.Go(func() error { // Setup the docker client
-			err = startupApp(ctx, &startupOptions{
-				portCounter:    portCounter,
-				uid:            id,
-				logPath:        LOG_PATH,
-				dockerClient:   engine,
-				serviceManager: manager,
-			})
+			err = startupApp(
+				ctx, PORT_COUNTER, id,
+				LOG_PATH, engine, manager,
+			)
 			if err != nil {
 				return err
 			}
@@ -228,20 +226,31 @@ func main() {
 		})
 	}
 	if err = wg.Wait(); err != nil {
-		log.Error(err)
-		cancel()
-		goto exit
+		handleExit(err)
 	}
 	log.Info("Done starting apps")
 
 	// Wait until signals arrive
 	<-ctx.Done()
-exit:
-	for _, proc := range AppContainerData {
+	handleExit(nil)
+}
+
+func handleExit(err error) {
+	if err != nil {
+		log.Error("Starting to exit", "error", err.Error())
+	} else {
+		log.Info("Starting to exit")
+	}
+	for _, proc := range RUNNING_CONTAINER_DATA {
 		if proc.engine != nil {
 			proc.engine.Close()
 		} else {
 			log.Warn("No engine found for application", "uid", proc.uid)
 		}
+	}
+	if err != nil {
+		os.Exit(1)
+	} else {
+		os.Exit(0)
 	}
 }

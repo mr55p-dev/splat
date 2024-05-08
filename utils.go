@@ -54,7 +54,7 @@ func listenForSignals(signals chan os.Signal, cancel context.CancelFunc) {
 		case syscall.SIGINFO:
 			// Should print some info out...
 			log.Info("Process info")
-			for key, info := range AppContainerData {
+			for key, info := range RUNNING_CONTAINER_DATA {
 				log.Info("", "process", key,
 					"Container ID", info.containerId,
 					"Container name", info.containerName,

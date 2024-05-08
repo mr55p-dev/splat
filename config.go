@@ -17,7 +17,7 @@ type RunningAppData struct {
 	status        string
 }
 
-var AppContainerData map[string]*RunningAppData
+var RUNNING_CONTAINER_DATA map[string]*RunningAppData
 
 type AppConfig struct {
 	Name      string `config:"name"`
