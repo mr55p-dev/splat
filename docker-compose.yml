@@ -1,3 +1,4 @@
+---
 version: "3"
 name: splat
 services:
@@ -9,6 +10,11 @@ services:
       - 80:80
       - 443:443
       - 8080:8080
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: eu-west-2
+        awslogs-group: /splat/traefik
     expose:
       - 80
       - 443
@@ -24,23 +30,22 @@ networks:
   traefik:
     name: traefik_proxy
     external: true
-
-# otel
-  # opentel-collector:
-  #   image: otel/opentelemetry-collector:0.99.0
-  #   container_name: opentelemetry-collector
-  #   volumes:
-  #     - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
-  #   ports:
-  #     - 1888:1888 # pprof extension
-  #     - 8888:8888 # Prometheus metrics exposed by the Collector
-  #     - 8889:8889 # Prometheus exporter metrics
-  #     - 4317:4317 # OTLP gRPC receiver
-  #     - 4318:4318 # OTLP http receiver
-  #     - 13133:13133 # health_check extension
-  #     - 55679:55679 # zpages extension
-  #   networks:
-  #     - otel-collector
+# otel:
+#   opentel-collector:
+#     image: otel/opentelemetry-collector:0.99.0
+#     container_name: opentelemetry-collector
+#     volumes:
+#       - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+#     ports:
+#       - 1888:1888 # pprof extension
+#       - 8888:8888 # Prometheus metrics exposed by the Collector
+#       - 8889:8889 # Prometheus exporter metrics
+#       - 4317:4317 # OTLP gRPC receiver
+#       - 4318:4318 # OTLP http receiver
+#       - 13133:13133 # health_check extension
+#       - 55679:55679 # zpages extension
+#     networks:
+#       - otel-collector
 
 #   opensearch-node1:
 #     image: opensearchproject/opensearch:latest
@@ -51,9 +56,9 @@ networks:
 #       - discovery.seed_hosts=opensearch-node1
 #       - cluster.initial_master_nodes=opensearch-node1
 #       - cluster.initial_cluster_manager_nodes=opensearch-node1
-#       - bootstrap.memory_lock=true 
-#       - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m 
-#       - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD} 
+#       - bootstrap.memory_lock=true
+#       - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+#       - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD}
 #       - DISABLE_INSTALL_DEMO_CONFIG=true
 #     ulimits:
 #       memlock:
